@@ -12,6 +12,7 @@
 		<PackageTags>rebus open-telemetry diagnostics metrics</PackageTags>
 		<PackageIcon>little_rebusbus2_copy-500x500.png</PackageIcon>
 		<PackageReadmeFile>README.md</PackageReadmeFile>
+    <LangVersion>12</LangVersion>
 	</PropertyGroup>
 
 	<ItemGroup>

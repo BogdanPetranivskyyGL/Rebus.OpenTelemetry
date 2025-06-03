@@ -93,6 +93,21 @@ namespace Rebus.Diagnostics.Outgoing
                 headers[RebusDiagnosticConstants.TraceStateHeaderName] = activity.Id;
             }
 
+            if (!headers.ContainsKey(RebusDiagnosticConstants.TraceIdHeaderName))
+            {
+                headers[RebusDiagnosticConstants.TraceIdHeaderName] = activity.TraceId.ToString();
+            }
+
+            if (!headers.ContainsKey(RebusDiagnosticConstants.TraceSpanIdHeaderName))
+            {
+                headers[RebusDiagnosticConstants.TraceSpanIdHeaderName] = activity.SpanId.ToString();
+            }
+
+            if (!headers.ContainsKey(RebusDiagnosticConstants.TraceFlagHeaderName))
+            {
+                headers[RebusDiagnosticConstants.TraceFlagHeaderName] = ((int)activity.ActivityTraceFlags).ToString();
+            }
+
             if (!headers.ContainsKey(RebusDiagnosticConstants.BaggageHeaderName))
             {
                 headers[RebusDiagnosticConstants.BaggageHeaderName] = JsonConvert.SerializeObject(activity.Baggage);

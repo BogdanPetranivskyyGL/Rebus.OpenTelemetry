@@ -6,6 +6,9 @@ namespace Rebus.Diagnostics
     public static class RebusDiagnosticConstants
     {
         public const string TraceStateHeaderName = "rbs-ot-tracestate";
+        public const string TraceIdHeaderName = "rbs-ot-traceid";
+        public const string TraceSpanIdHeaderName = "rbs-ot-tracespanid";
+        public const string TraceFlagHeaderName = "rbs-ot-traceflag";
         public const string BaggageHeaderName = "rbs-ot-correlation-context";
         
 

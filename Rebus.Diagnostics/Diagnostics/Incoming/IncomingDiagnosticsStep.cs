@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
 using Rebus.Bus;
@@ -60,15 +61,42 @@ namespace Rebus.Diagnostics.Incoming
                     : ActivityKind.Server;
 
                 var activityName = $"{messageType} receive";
-                if (!headers.TryGetValue(RebusDiagnosticConstants.TraceStateHeaderName, out var traceState))
-                {
-                    activity = RebusDiagnosticConstants.ActivitySource.StartActivity(activityName, activityKind, default(ActivityContext), initialTags);
+                IEnumerable<ActivityLink>? links = null;
+                if (headers.TryGetValue(RebusDiagnosticConstants.TraceIdHeaderName, out var traceId)
+                    && headers.TryGetValue(RebusDiagnosticConstants.TraceSpanIdHeaderName, out var spanId)
+                    )
+                { 
+                    if(!headers.TryGetValue(RebusDiagnosticConstants.TraceFlagHeaderName, out var traceFlagStr))
+                    {
+                        traceFlagStr = "0";
+                    }
+
+                    if (!int.TryParse(traceFlagStr, out var traceFlags))
+                    {
+                        traceFlags = 0;
+                    }
+
+                    headers.TryGetValue(RebusDiagnosticConstants.TraceStateHeaderName, out var traceState);
+
+                    try
+                    {
+                        var activityContext = new ActivityContext(
+                            traceId: ActivityTraceId.CreateFromString(traceId.AsSpan())
+                            , spanId: ActivitySpanId.CreateFromString(spanId.AsSpan())
+                            , traceFlags: (ActivityTraceFlags)traceFlags
+                            , traceState: traceState
+                            );
+
+                        links = [new ActivityLink(activityContext)];
+                    }
+                    catch { }
                 }
-                else
-                {
-                    activity = RebusDiagnosticConstants.ActivitySource.StartActivity(activityName, activityKind,
-                        traceState, initialTags);
-                }
+
+                activity = RebusDiagnosticConstants.ActivitySource.StartActivity(activityName
+                        , activityKind
+                        , default(ActivityContext)
+                        , initialTags
+                        , links);
 
                 if (activity != null)
                 {
