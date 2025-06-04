@@ -31,7 +31,7 @@ namespace Rebus.Diagnostics.Incoming
             using var activity = StartActivity(context, message);
 
             _stepMeter.Observe(message);
-            
+
             try
             {
                 await next();
@@ -52,7 +52,7 @@ namespace Rebus.Diagnostics.Incoming
                 var messageType = message.GetMessageType();
 
                 var messageWrapper = new TransportMessageWrapper(message);
-            
+
                 var initialTags = TagHelper.ExtractInitialTags(messageWrapper);
                 initialTags.Add("messaging.operation", "receive");
 
@@ -62,34 +62,11 @@ namespace Rebus.Diagnostics.Incoming
 
                 var activityName = $"{messageType} receive";
                 IEnumerable<ActivityLink>? links = null;
-                if (headers.TryGetValue(RebusDiagnosticConstants.TraceIdHeaderName, out var traceId)
-                    && headers.TryGetValue(RebusDiagnosticConstants.TraceSpanIdHeaderName, out var spanId)
-                    )
-                { 
-                    if(!headers.TryGetValue(RebusDiagnosticConstants.TraceFlagHeaderName, out var traceFlagStr))
-                    {
-                        traceFlagStr = "0";
-                    }
-
-                    if (!int.TryParse(traceFlagStr, out var traceFlags))
-                    {
-                        traceFlags = 0;
-                    }
-
-                    headers.TryGetValue(RebusDiagnosticConstants.TraceStateHeaderName, out var traceState);
-
-                    try
-                    {
-                        var activityContext = new ActivityContext(
-                            traceId: ActivityTraceId.CreateFromString(traceId.AsSpan())
-                            , spanId: ActivitySpanId.CreateFromString(spanId.AsSpan())
-                            , traceFlags: (ActivityTraceFlags)traceFlags
-                            , traceState: traceState
-                            );
-
-                        links = [new ActivityLink(activityContext)];
-                    }
-                    catch { }
+                if (headers.TryGetValue(RebusDiagnosticConstants.TraceStateHeaderName, out var traceId)
+                    && traceId is { }
+                    && ActivityContext.TryParse(traceId, traceState: null, out var linkContext))
+                {
+                    links = [new ActivityLink(linkContext)];
                 }
 
                 activity = RebusDiagnosticConstants.ActivitySource.StartActivity(activityName
@@ -100,31 +77,19 @@ namespace Rebus.Diagnostics.Incoming
 
                 if (activity != null)
                 {
-                    CopyBaggage(headers, activity);
+                    activity.ApplyBaggageFrom(headers);
                 }
 
                 // TODO: Not sure if this is still needed
                 // DiagnosticListener.OnActivityImport(activity, context);
             }
-            
+
             SendBeforeProcessEvent(context, activity);
 
             return activity;
         }
 
-        private static void CopyBaggage(Dictionary<string, string> headers, Activity activity)
-        {
-            if (headers.TryGetValue(RebusDiagnosticConstants.BaggageHeaderName, out var baggageContent))
-            {
-                var baggage =
-                    JsonConvert.DeserializeObject<IEnumerable<KeyValuePair<string, string>>>(baggageContent);
 
-                foreach (var keyValuePair in baggage)
-                {
-                    activity.AddBaggage(keyValuePair.Key, keyValuePair.Value);
-                }
-            }
-        }
 
         private static void SendBeforeProcessEvent(IncomingStepContext context, Activity? activity)
         {

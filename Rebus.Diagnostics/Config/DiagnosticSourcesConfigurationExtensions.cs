@@ -1,17 +1,44 @@
-﻿using System;
-using Rebus.Diagnostics.Incoming;
+﻿using Rebus.Diagnostics.Incoming;
+using Rebus.Diagnostics.Incoming.Overrides;
 using Rebus.Diagnostics.Outgoing;
+using Rebus.Logging;
 using Rebus.Pipeline;
 using Rebus.Pipeline.Receive;
 using Rebus.Pipeline.Send;
+using Rebus.Retry;
+using Rebus.Retry.FailFast;
+using Rebus.Retry.Info;
+using Rebus.Retry.Simple;
+using System;
+using System.Threading;
 
 namespace Rebus.Config;
 
 public static class DiagnosticSourcesConfigurationExtensions
 {
-    public static OptionsConfigurer EnableDiagnosticSources(this OptionsConfigurer configurer)
+    public static OptionsConfigurer EnableDiagnosticSources(this OptionsConfigurer configurer
+        , bool canSupportInMemExceptionInfoFactory = true)
     {
         if (configurer == null) throw new ArgumentNullException(nameof(configurer));
+
+        configurer.Register<IExceptionInfoFactory>(c =>
+        {
+            return new InMemExceptionInfoFactory();
+        });
+
+        configurer.Decorate<IErrorHandler>(c =>
+        {
+            return new DecoratedErrorHandle(
+                errorHandler: c.Get<IErrorHandler>()
+                , errorTracker: c.Get<IErrorTracker>()
+                )
+                ;
+        });
+
+        configurer.Decorate<IErrorTracker>(c =>
+        {
+            return new DecoratedErrorTracker(c.Get<IErrorTracker>());
+        });
 
         configurer.Decorate<IPipeline>(c =>
         {

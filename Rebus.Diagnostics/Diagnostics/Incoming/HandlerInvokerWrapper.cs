@@ -41,16 +41,7 @@ internal class HandlerInvokerWrapper : HandlerInvoker
             
         TagHelper.CopyBaggage(parentActivity, activity);
 
-        try
-        {
-            await _handlerInvokerImplementation.Invoke();
-        }
-        catch (Exception e)
-        {
-            activity?.AddException(e);
-            activity?.SetStatus(ActivityStatusCode.Error, e.Message);
-            throw;
-        }
+        await _handlerInvokerImplementation.Invoke();
     }
 
     public override void SetSagaData(ISagaData sagaData)

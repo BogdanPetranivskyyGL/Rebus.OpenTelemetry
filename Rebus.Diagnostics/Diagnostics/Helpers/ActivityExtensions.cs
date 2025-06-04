@@ -1,3 +1,4 @@
+using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -43,6 +44,9 @@ internal static class ActivityExtensions
             {
                 hasType = true;
             }
+
+            if (hasMessage && hasStackTrace && hasType)
+                break;
         }
 
         if (!hasMessage)
@@ -61,5 +65,20 @@ internal static class ActivityExtensions
         }
 
         return activity.AddEvent(new ActivityEvent(ExceptionEventName, timestamp, exceptionTags));
+    }
+
+
+    public static void ApplyBaggageFrom(this Activity activity, IReadOnlyDictionary<string, string> headers)
+    {
+        if (headers.TryGetValue(RebusDiagnosticConstants.BaggageHeaderName, out var baggageContent))
+        {
+            var baggage =
+                JsonConvert.DeserializeObject<IEnumerable<KeyValuePair<string, string>>>(baggageContent);
+
+            foreach (var keyValuePair in baggage)
+            {
+                activity.AddBaggage(keyValuePair.Key, keyValuePair.Value);
+            }
+        }
     }
 }
