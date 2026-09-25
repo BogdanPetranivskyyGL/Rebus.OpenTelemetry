@@ -7,6 +7,7 @@ using Newtonsoft.Json;
 using Rebus.Bus;
 using Rebus.Diagnostics.Helpers;
 using Rebus.Diagnostics.Outgoing;
+using Rebus.Logging;
 using Rebus.Messages;
 using Rebus.Pipeline;
 
@@ -15,12 +16,15 @@ namespace Rebus.Diagnostics.Incoming
     [StepDocumentation("Extracts trace from the incoming message and starts an activity for it")]
     public class IncomingDiagnosticsStep : IIncomingStep
     {
+        private readonly ILog _log;
+
         private static readonly DiagnosticSource DiagnosticListener =
             new DiagnosticListener(RebusDiagnosticConstants.ConsumerActivityName);
         private readonly StepMeter _stepMeter;
 
-        public IncomingDiagnosticsStep()
+        public IncomingDiagnosticsStep(ILog log)
         {
+            _log = log;
             _stepMeter = new StepMeter("incoming");
         }
 
@@ -42,54 +46,57 @@ namespace Rebus.Diagnostics.Incoming
             }
         }
 
-        private static Activity? StartActivity(IncomingStepContext context, TransportMessage message)
+        private Activity? StartActivity(IncomingStepContext context, TransportMessage message)
         {
-            Activity? activity = null;
-            if (RebusDiagnosticConstants.ActivitySource.HasListeners())
+            try
             {
-                var headers = message.Headers;
-
-                var messageType = message.GetMessageType();
-
-                var messageWrapper = new TransportMessageWrapper(message);
-
-                var initialTags = TagHelper.ExtractInitialTags(messageWrapper);
-                initialTags.Add("messaging.operation", "receive");
-
-                var activityKind = messageWrapper.GetIntentOption() == Headers.IntentOptions.PublishSubscribe
-                    ? ActivityKind.Consumer
-                    : ActivityKind.Server;
-
-                var activityName = $"{messageType} receive";
-                IEnumerable<ActivityLink>? links = null;
-                if (headers.TryGetValue(RebusDiagnosticConstants.TraceStateHeaderName, out var traceId)
-                    && traceId is { }
-                    && ActivityContext.TryParse(traceId, traceState: null, out var linkContext))
+                Activity? activity = null;
+                if (RebusDiagnosticConstants.ActivitySource.HasListeners())
                 {
-                    links = [new ActivityLink(linkContext)];
+                    var headers = message.Headers;
+
+                    var messageType = message.GetMessageType();
+
+                    var messageWrapper = new TransportMessageWrapper(message);
+
+                    var initialTags = TagHelper.ExtractInitialTags(messageWrapper);
+                    initialTags.Add("messaging.operation", "receive");
+
+                    var activityKind = messageWrapper.GetIntentOption() == Headers.IntentOptions.PublishSubscribe
+                        ? ActivityKind.Consumer
+                        : ActivityKind.Server;
+
+                    var activityName = $"{messageType} receive";
+                    IEnumerable<ActivityLink>? links = null;
+                    if (headers.TryGetValue(RebusDiagnosticConstants.TraceStateHeaderName, out var traceId)
+                        && traceId is { }
+                        && ActivityContext.TryParse(traceId, traceState: null, out var linkContext))
+                    {
+                        links = [new ActivityLink(linkContext)];
+                    }
+
+                    activity = RebusDiagnosticConstants.ActivitySource.StartActivity(activityName
+                            , activityKind
+                            , default(ActivityContext)
+                            , initialTags
+                            , links);
+
+                    activity?.ApplyBaggageFrom(headers, _log);
+
+                    // TODO: Not sure if this is still needed
+                    // DiagnosticListener.OnActivityImport(activity, context);
                 }
 
-                activity = RebusDiagnosticConstants.ActivitySource.StartActivity(activityName
-                        , activityKind
-                        , default(ActivityContext)
-                        , initialTags
-                        , links);
+                SendBeforeProcessEvent(context, activity);
 
-                if (activity != null)
-                {
-                    activity.ApplyBaggageFrom(headers);
-                }
-
-                // TODO: Not sure if this is still needed
-                // DiagnosticListener.OnActivityImport(activity, context);
+                return activity;
             }
-
-            SendBeforeProcessEvent(context, activity);
-
-            return activity;
+            catch (Exception e)
+            {
+                _log.Warn(e, "Failed to start message activity. Continuing without");
+                return null;
+            }
         }
-
-
 
         private static void SendBeforeProcessEvent(IncomingStepContext context, Activity? activity)
         {

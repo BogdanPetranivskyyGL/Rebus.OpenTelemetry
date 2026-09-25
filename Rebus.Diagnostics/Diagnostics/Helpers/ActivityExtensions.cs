@@ -1,4 +1,5 @@
 using Newtonsoft.Json;
+using Rebus.Logging;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -68,17 +69,31 @@ internal static class ActivityExtensions
     }
 
 
-    public static void ApplyBaggageFrom(this Activity activity, IReadOnlyDictionary<string, string> headers)
+    public static void ApplyBaggageFrom(this Activity activity, IReadOnlyDictionary<string, string> headers, ILog? log = null)
     {
-        if (headers.TryGetValue(RebusDiagnosticConstants.BaggageHeaderName, out var baggageContent))
+        if (!headers.TryGetValue(RebusDiagnosticConstants.BaggageHeaderName, out var baggageContent))
+        {
+            return;
+        }
+
+        try
         {
             var baggage =
                 JsonConvert.DeserializeObject<IEnumerable<KeyValuePair<string, string>>>(baggageContent);
+
+            if (baggage == null)
+            {
+                return;
+            }
 
             foreach (var keyValuePair in baggage)
             {
                 activity.AddBaggage(keyValuePair.Key, keyValuePair.Value);
             }
+        }
+        catch (Exception e)
+        {
+            log?.Warn(e, "Failed to process activity baggage: {0}", baggageContent);
         }
     }
 }
